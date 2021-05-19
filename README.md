@@ -255,10 +255,12 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     # Returns a DXL representing the actuator with the given id
     # If one was previously instantiated, a reference to that one is returned
     # If no actuator with that id exists, returns None
-		# If a callback is specified, each actuator will call back with the comm
-		# result and error byte. The signature of the callback is
-		#   def callback(dxl: DXL, commResult: int, errorByte: int)
-    def getDXL(self, id: int, callback = None)
+    # If a callback is specified, each actuator will call back with the comm
+    # result and error byte. The signature of the callback is
+    #   def callback(dxl: DXL, commResult: int, errorByte: int)
+    # If a callback is specified for an instantiated DXL, the new one will
+    # replace the old one. If None is specified, there will be no change.
+     and a minor enhancementdef getDXL(self, id: int, callback = None)
 
     ############################################################################
     # Disables torque, sets the goal position to the present position, sets
