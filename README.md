@@ -1,6 +1,6 @@
 # DXL.py
 Python drop-in module that wraps the Dynamixel Protocol 1.0 api in a friendly Python class that is thread safe within the same Kernel.
-Protocol 2.0 is not supported.
+Protocol 2.0 is not yet supported. Currently supports only AX, EX, RX, and MX models.
 
 ## Requires the DynamixelSDK
 If you haven't already, install the DynamixelSDK by following the instructions provided at
