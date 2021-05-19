@@ -81,11 +81,7 @@ timer.sleep(3.0)
 # Disable torque
 controller.syncWriteInit(RAM_TORQUE_ENABLE, 1) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
 for id in range(1, 11):
-  servo = controller.getDXL(i)
-  if servo == None:
-    print(f"Actuator {id} not found")
-    exit(-1)
-  servo.torqueEnable = 0
+  controller.getDXL(i).torqueEnable = 0
 result = controller.syncWriteComplete()
 
 if result != 0:
