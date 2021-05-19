@@ -19,12 +19,19 @@ from DXL import *
 
 controller = DXLPort('/dev/ttyUSB0', 1000000)
 
-servo1 = controller.getDXL(1)
+def callback(dxl: DXL, commResult: int, errorByte: int):
+	if commResult != 0:
+	  print(f"Comm error with servo {dxl.id}: {controller.resultString(commResult)}")
+	if errorByte != 0:
+	  print(f"Servo1 returned error: {controller.errorString(errorByte)}")
+	if commResult != 0 or errorByte != 0: exit(-1)
+  
+servo1 = controller.getDXL(1, callback)
 if servo1 == None:
   print("No actuator with id 1")
   exit(-1)
   
-servo2 = controller.getDXL(2)
+servo2 = controller.getDXL(2, callback)
 if servo2 == None:
   print("No actuator with id 2")
   exit(-1)
@@ -32,17 +39,6 @@ if servo2 == None:
 servo1.torqueEnable = 1
 servo2.torqueEnable = 1
 
-if servo1.result != 0:
-  print(f"Comm error with servo1: {controller.resultString(servo1.result)}")
-if servo1.error != 0:
-  print(f"Servo1 returned error: {controller.errorString(servo1.error)}")
-  
-if servo2.result != 0:
-  print(f"Comm error with servo2: {controller.resultString(servo2.result)}")
-  
-if servo2.error != 0:
-  print(f"Servo2 returned error: {controller.errorString(servo2.error)}")
-  
 servo1.goalPosition = 30.0
 servo2.goalPosition = 60.0
 ```
@@ -259,7 +255,10 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     # Returns a DXL representing the actuator with the given id
     # If one was previously instantiated, a reference to that one is returned
     # If no actuator with that id exists, returns None
-    def getDXL(self, id: int)
+		# If a callback is specified, each actuator will call back with the comm
+		# result and error byte. The signature of the callback is
+		#   def callback(dxl: DXL, commResult: int, errorByte: int)
+    def getDXL(self, id: int, callback = None)
 
     ############################################################################
     # Disables torque, sets the goal position to the present position, sets
