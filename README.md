@@ -308,38 +308,17 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     def writeUInt16(self, id: int, register: int, value: int)
 
     ############################################################################
-    # Opens a sync read session
-    # Pass in the starting register address, and the number of bytes (between 1
-    # and 4)
-    def syncReadInit(self, register: int, dataLen: int)
-
-    ############################################################################
-    # Pushes an actuator id into the synch read tx buffer
-    def syncReadPush(self, dxl, register: int)
-
-    ############################################################################
-    # Closes the sync read session and broadcasts the sync read command and
-    # collects the returned data in a { key: value } dictionary.
+    # Performs a sync read for the servos specified in the idList
     # If successful, returns COMM_SUCCESS, data
     # If unsuccessful, returns the result code, and an empty dictionary
-    def syncReadComplete(self)
-
+    # Data is a { servoId: value } dictionary.
+    def syncRead(self, register: int, dataLen: int, idList: List[int])
+    
     ############################################################################
-    # Opens a sync write session
-    # Pass in the starting register address, and the number of bytes (between 1
-    # and 4)
-    def syncWriteInit(self, register: int, dataLen: int)
-
-    ############################################################################
-    # Pushes an actuator id, and a value into the synch write tx buffer
-    def syncWritePush(self, dxl, register: int, value: int)
-
-    ############################################################################
-    # Closes the sync write session and broadcasts the sync write command and
-    # collects the returned data in a { key: value } dictionary.
+    # Performs a sync write for the servo, value pairs specified in the dataDict
     # If successful, returns COMM_SUCCESS
     # If unsuccessful, returns the result code
-    def syncWriteComplete(self)
+    def syncWrite(self, register: int, dataLen: int, dataDict)
 ```
 ### DXLException(Exception) class
 ```Python
