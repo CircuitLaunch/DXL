@@ -1,5 +1,6 @@
 # DXL.py
 Python drop-in module that wraps the Dynamixel Protocol 1.0 api in a friendly Python class that is thread safe within the same Kernel.
+Protocol 2.0 is not supported.
 
 ## Requires the DynamixelSDK
 If you haven't already, install the DynamixelSDK by following the instructions provided at
@@ -263,6 +264,8 @@ gErrorBitDescriptors = ['INSTURCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     ############################################################################
     # Constructor
     # Pass in the port name, and the baud rate
+    # Throws DXLException if a connection to the device cannot be made
+    # or if the baud rate is not supported
     def __init__(self, address: str, baud: int = 57600)
 
     ############################################################################
