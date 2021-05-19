@@ -10,6 +10,8 @@ It exposes ALL Dynamixel registers with convenient accessors (except write acces
 
 The DXL instance stores the comm result and error byte after each and every property access (get or set), except in the case of sync reads and writes, in which case only the single comm result is available. The comm result is 0 if the communication was successful, and non-zero if there was a communication error of some kind. The error byte, is a set of 7 flags returned by, and indicating the error status on, the Dynamixel actuator itself.
 
+A callback can be set for each DXL that will be called with the comm result and error byte after each parameter access.
+
 The code is thread-safe within the same Python kernel.
 
 It deals with servo positions in degrees.
@@ -45,12 +47,12 @@ def callback(dxl: DXL, commResult: int, errorByte: int):
 	if errorByte != 0:
 	  print(f"Servo1 returned error: {controller.errorString(errorByte)}")
 	if commResult != 0 or errorByte != 0: exit(-1)
-  
+
 servo1 = controller.getDXL(1, callback)
 if servo1 == None:
   print("No actuator with id 1")
   exit(-1)
-  
+
 servo2 = controller.getDXL(2, callback)
 if servo2 == None:
   print("No actuator with id 2")
@@ -83,10 +85,10 @@ result = controller.syncWrite(RAM_GOAL_POSITION, 2, zip(servos, angles)) # Regis
 
 if result != 0:
   print(f"Comm error on sync write goalPosition: {controller.resultString(result)}")
-  
+
 # Allow time for servos to attain goal position
 timer.sleep(3.0)
-  
+
 # Disable torque for servos 1 through 10
 result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, zip(servos, [0] * len(servos)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
 
@@ -104,7 +106,7 @@ result, dictionary = controller.syncRead(RAM_PRESENT_POSITION, 2, list(range(1,1
 
 if result != 0:
   print(f"Comm error on sync read: {controller.resultString(result)}")
-  
+
 for id in range(1, 11):
   print(f"Present position of actuator {id}: {dictionary[id]}")
 ```
@@ -334,7 +336,7 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     # If unsuccessful, returns the result code, and an empty dictionary
     # Data is a { servoId: value } dictionary.
     def syncRead(self, register: int, dataLen: int, idList: List[int])
-    
+
     ############################################################################
     # Performs a sync write for the servo, value pairs specified in the dataDict
     # If successful, returns COMM_SUCCESS
@@ -349,7 +351,7 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     self.function   # the name of the function from which the exception was thrown
     self.line       # the line number in the file on which the exception was thrown
     self.msg        # the message passed to the constructor
-    
+
     ############################################################################
     # Constructor
     # Initializes member variables with the filename, function, and line number
@@ -387,10 +389,10 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
 
     @property
     def stepResolution(self) # Base class throws unimplemented exception
-    
+
     @property
     def centerOffset(self)  # Base class throws unimplemented exception
-    
+
     @property
     def firmwareVersion(self)
 
@@ -489,7 +491,7 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
 
     @property
     def registered(self)
-    
+
     @property
     def moving(self)
 
@@ -507,10 +509,10 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
 ```Python
     ################################################################################
     # Accessors to registers unique to AX, RX and EX models
-    
+
     @DXL.stepResolution.getter
     def stepResolution(self) # Overrides super class property to return 0.29
-    
+
     @DXL.centerOffset.getter
     def centerOffset(self) # Overrides super class property to return 512
 
@@ -539,7 +541,7 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
 ```Python
     ################################################################################
     # Accessors to registers unique to the EX model
-    
+
     @DXL_AX.stepResolution.getter
     def stepResolution(self) # Overrides super class property to return 0.06127
 
@@ -553,7 +555,7 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
 ```Python
     ################################################################################
     # Accessors to registers unique to MX models
-    
+
     @DXL.stepResolution.getter
     def stepResolution(self) # Overrides super class property to return 0.088
 
@@ -597,7 +599,7 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
 ```Python
     ################################################################################
     # Accessors to registers unique to the MX64 and MX106 models
-    
+
     @property
     def current(self)
     @current.setter
