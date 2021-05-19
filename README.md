@@ -1,7 +1,46 @@
 # DXL.py
+## tl;dr;The Dynamixel API is not very friendly, so I decided to write a few warm and fuzzy Python classes to wrap it in.
+
+It exposes ALL Dynamixel registers with convenient accessors (except write access to the temperature limit register, which is not a smart thing to change).
+
+The DXL instance stores the comm result and error byte after each and every property access (get or set), except in the case of sync reads and writes, in which case only the single comm result is available. The comm result is 0 if the communication was successful, and non-zero if there was a communication error of some kind. The error byte, is a set of 7 flags returned by, and indicating the error status on, the Dynamixel actuator itself.
+
+The code is thread-safe within the same Python kernel.
+
+It deals with servo positions in degrees.
+
+There are conversions of cryptic codes into human understandable strings.
+
+There's a method to recover from overloads.
+
+Sync reads and writes are easy.
+
+And it's fully documented.
+
+Currently only supports Protocol 1.0, and AX, EX, RX, and MX models.
 Python drop-in module that wraps the Dynamixel Protocol 1.0 api in a friendly Python class that is thread safe within the same Kernel.
 Protocol 2.0 is not yet supported. Currently supports only AX, EX, RX, and MX models.
 
+## Intro
+The Dynamixel API is not very friendly, so I decided to write a few warm and fuzzy Python classes to wrap it in.
+
+It exposes ALL Dynamixel registers with convenient accessors (except write access to the temperature limit register, which is not a smart thing to change).
+
+The DXL instance stores the comm result and error byte after each and every property access (get or set), except in the case of sync reads and writes, in which case only the single comm result is available. The comm result is 0 if the communication was successful, and non-zero if there was a communication error of some kind. The error byte, is a set of 7 flags returned by, and indicating the error status on, the Dynamixel actuator itself.
+
+The code is thread-safe within the same Python kernel.
+
+It deals with servo positions in degrees.
+
+There are conversions of cryptic codes into human understandable strings.
+
+There's a method to recover from overloads.
+
+Sync reads and writes are easy.
+
+And it's fully documented.
+
+Currently only supports Protocol 1.0, and AX, EX, RX, and MX models.
 ## Requires the DynamixelSDK
 If you haven't already, install the DynamixelSDK by following the instructions provided at
 https://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_sdk/overview/
