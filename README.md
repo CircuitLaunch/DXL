@@ -53,25 +53,17 @@ import timer
 
 controller = DXLPort('/dev/ttyUSB0', 1000000)
 
+servos = list(range(1,11))
 angles = [-50, -40, -30, -20, -10, 10, 20, 30, 40, 50]
 
-# Enable torque
-controller.syncWriteInit(RAM_TORQUE_ENABLE, 1) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
-for id in range(1, 11):
-  servo = controller.getDXL(i)
-  if servo == None:
-    print(f"Actuator {id} not found")
-    exit(-1)
-  servo.torqueEnable = 1
-result = controller.syncWriteComplete()
+# Enable torque for servos 1 though 10
+result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, zip(servos, [1] * len(servos)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
+
 if result != 0:
   print(f"Comm error on sync write torqueEnable: {controller.resultString(result)}")
 
-# Command servos to goal positions
-controller.syncWriteInit(RAM_GOAL_POSITION, 2) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
-for id in range(1, 11):
-  controller.getDXL(i).goalPosition = angles[1]
-result = controller.syncWriteComplete()
+# Command servos 1 through 10 to respective goal positions
+result = controller.syncWrite(RAM_GOAL_POSITION, 2, zip(servos, angles)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
 
 if result != 0:
   print(f"Comm error on sync write goalPosition: {controller.resultString(result)}")
@@ -79,11 +71,8 @@ if result != 0:
 # Allow time for servos to attain goal position
 timer.sleep(3.0)
   
-# Disable torque
-controller.syncWriteInit(RAM_TORQUE_ENABLE, 1) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
-for id in range(1, 11):
-  controller.getDXL(i).torqueEnable = 0
-result = controller.syncWriteComplete()
+# Disable torque for servos 1 through 10
+result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, zip(servos, [0] * len(servos)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
 
 if result != 0:
   print(f"Comm error on sync write torqueEnable: {controller.resultString(result)}")
@@ -94,14 +83,8 @@ from DXL import *
 
 controller = DXLPort('/dev/ttyUSB0', 1000000)
 
-# Get present position
-controller.syncReadInit(RAM_PRESENT_POSITION, 2) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
-for id in range(1, 11):
-  servo = controller.getDXL(i)
-  if servo == None:
-    print(f"Actuator {id} not found")
-  servo.presentPosition
-result, dictionary = controller.syncReadComplete()
+# Get present position for servos 1 through 10
+result, dictionary = controller.syncRead(RAM_PRESENT_POSITION, 2, list(range(1,11))) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
 
 if result != 0:
   print(f"Comm error on sync read: {controller.resultString(result)}")
