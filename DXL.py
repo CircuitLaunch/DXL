@@ -36,8 +36,9 @@
 
 ################################################################################
 # Import dependencies
-import dynamixel_sdk as dxl
-
+import dynamixel_sdk as sdk
+import time
+from typing import List
 from threading import Lock
 import inspect
 
@@ -164,17 +165,17 @@ gModelCodeToStrDict = {
 
 ############################################################################
 # Result code and error bit dictionaries
-gResultCodeDescriptors = [
-    dxl.COMM_SUCCESS: 'OK',
-    dxl.COMM_PORT_BUSY: 'PORT_BUSY',
-    dxl.COMM_TX_FAIL: 'TX_FAIL',
-    dxl.COMM_RX_FAIL: 'RX_FAIL',
-    dxl.COMM_TX_ERROR: 'TX_ERROR',
-    dxl.COMM_RX_WAITING: 'RX_WAITING',
-    dxl.COMM_RX_TIMEOUT: 'RX_TIMEOUT',
-    dxl.COMM_RX_CORRUPT: 'RX_CORRUPT',
-    dxl.COMM_NOT_AVAILABLE: 'NOT_AVAILABLE'
-]
+gResultCodeDescriptors = {
+    sdk.COMM_SUCCESS: 'OK',
+    sdk.COMM_PORT_BUSY: 'PORT_BUSY',
+    sdk.COMM_TX_FAIL: 'TX_FAIL',
+    sdk.COMM_RX_FAIL: 'RX_FAIL',
+    sdk.COMM_TX_ERROR: 'TX_ERROR',
+    sdk.COMM_RX_WAITING: 'RX_WAITING',
+    sdk.COMM_RX_TIMEOUT: 'RX_TIMEOUT',
+    sdk.COMM_RX_CORRUPT: 'RX_CORRUPT',
+    sdk.COMM_NOT_AVAILABLE: 'NOT_AVAILABLE'
+}
 
 gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEAT', 'ANGLE', 'VOLTAGE']
 
@@ -220,10 +221,11 @@ class DXLPort:
         self.lock = Lock()
         self.baud = baud
         self.port = None
-        port = dxl.PortHandler(address)
+        port = sdk.PortHandler(address)
         self.actuators = {}
         self.actuatorLock = Lock()
         self.syncRegister = None
+        self.syncDataLen = 0
         self.syncLock = Lock()
         self.syncEncoder = None
         self.syncReadDXLs = None
@@ -241,7 +243,7 @@ class DXLPort:
         except Exception as x:
             raise(DXLException(str(x)))
 
-        self.packetHandler = dxl.PacketHandler(1.0)
+        self.packetHandler = sdk.PacketHandler(1.0)
 
     ############################################################################
     # Destructor
@@ -298,8 +300,9 @@ class DXLPort:
         with self.syncLock:
             self.writeUInt8(id, RAM_TORQUE_ENABLE, 0)
             time.sleep(1.0)
-            self.writeUInt16(id, RAM_GOAL_POSITION, self.readUInt16(id, RAM_PRESENT_POSITION))
-            self.writeUInt8(id, RAM_TORQUE_LIMIT, 1024)
+            presentPosition, _, _ = self.readUInt16(id, RAM_PRESENT_POSITION)
+            self.writeUInt16(id, RAM_GOAL_POSITION, presentPosition)
+            self.writeUInt16(id, RAM_TORQUE_LIMIT, 1023)
             self.writeUInt8(id, RAM_TORQUE_ENABLE, 1)
 
     ############################################################################
@@ -366,6 +369,11 @@ class DXLPort:
             result, error = self.packetHandler.write2ByteTxRx(self.port, id, register, value)
         return result, error
 
+    '''
+    ############################################################################
+    # ARGGGGGGHHHHH, syncRead is not available in Protocol 1.0
+    ############################################################################
+
     ############################################################################
     # Performs a sync read for the servos specified in the idList
     # If successful, returns COMM_SUCCESS, data
@@ -374,7 +382,7 @@ class DXLPort:
     def syncRead(self, register: int, dataLen: int, idList: List[int]):
         self.syncReadInit(register, dataLen)
         for id in idList:
-            if id in self.actuators[id]:
+            if id in self.actuators:
                 self.syncReadPush(self.actuators[id], register)
         return self.syncReadComplete()
 
@@ -384,7 +392,7 @@ class DXLPort:
     # and 4)
     def syncReadInit(self, register: int, dataLen: int):
         self.syncLock.acquire()
-        self.syncEncoder = dxl.GroupSyncRead(self.port, self.packetHandler, register, dataLen)
+        self.syncEncoder = sdk.GroupSyncRead(self.port, self.packetHandler, register, dataLen)
         self.syncRegister = register
         self.syncReadDXLs = []
 
@@ -404,16 +412,18 @@ class DXLPort:
     # If unsuccessful, returns the result code, and an empty dictionary
     def syncReadComplete(self):
         self.syncRegister = None
-        result = dxl.COMM_SUCCESS
+        result = sdk.COMM_SUCCESS
         data = {}
-        if len(syncReadhDXLs) > 0:
-            with self.lock():
+        if len(self.syncReadDXLs) > 0:
+            with self.lock:
                 result = self.syncEncoder.txRxPacket()
-            data = { dxl.id: dxl.convert(self.register, syncEncoder.getData(dxl.id)) for dxl in self.syncReadDXLs }
+            if result == sdk.COMM_SUCCESS:
+                data = { dxl.id: dxl.convert(self.syncRegister, self.syncEncoder.getData(dxl.id, self.syncRegister, 1)) for dxl in self.syncReadDXLs }
         self.syncEncoder = None
         self.syncReadDXLs = None
         self.syncLock.release()
         return result, data
+    '''
 
     ############################################################################
     # Performs a sync write for the servo, value pairs specified in the dataDict
@@ -421,7 +431,7 @@ class DXLPort:
     # If unsuccessful, returns the result code
     def syncWrite(self, register: int, dataLen: int, dataDict):
         self.syncWriteInit(register, dataLen)
-        for (id, value) in dataDict.items():
+        for id, value in dataDict.items():
             if id in self.actuators:
                 self.syncWritePush(self.actuators[id], register, value)
         return self.syncWriteComplete()
@@ -432,7 +442,8 @@ class DXLPort:
     # and 4)
     def syncWriteInit(self, register: int, dataLen: int):
         self.syncLock.acquire()
-        self.syncEncoder = dxl.GroupSyncWrite(self.port, self.packetHandler, register, dataLen)
+        self.syncDataLen = dataLen
+        self.syncEncoder = sdk.GroupSyncWrite(self.port, self.packetHandler, register, dataLen)
         self.syncRegister = register
         self.syncWriteCount = 0
 
@@ -440,8 +451,8 @@ class DXLPort:
     # Pushes an actuator id, and a value into the synch write tx buffer
     def syncWritePush(self, dxl, register: int, value: int):
         if self.syncRegister == register:
-            param = [DXL_LOBYTE(DXL_LOWORD(value)), DXL_HIBYTE(DXL_LOWORD(value)), DXL_LOBYTE(DXL_HIWORD(value)), DXL_HIBYTE(DXL_HIWORD(value))]
-            if not self.syncEncoder.addParam(dxl.id, param):
+            param = [sdk.DXL_LOBYTE(sdk.DXL_LOWORD(value)), sdk.DXL_HIBYTE(sdk.DXL_LOWORD(value)), sdk.DXL_LOBYTE(sdk.DXL_HIWORD(value)), sdk.DXL_HIBYTE(sdk.DXL_HIWORD(value))]
+            if not self.syncEncoder.addParam(dxl.id, param[0:self.syncDataLen]):
                 return False
             self.syncWriteCount += 1
             return True
@@ -453,9 +464,9 @@ class DXLPort:
     # If unsuccessful, returns the result code
     def syncWriteComplete(self):
         self.syncRegister = None
-        result = dxl.COMM_SUCCESS
+        result = sdk.COMM_SUCCESS
         if self.syncWriteCount > 0:
-            with self.lock():
+            with self.lock:
                 result = self.syncEncoder.txPacket()
         self.syncEncoder = None
         self.syncLock.release()
@@ -473,7 +484,7 @@ class DXL:
         self.error = None
         self.offset = 0.0
         self.callback = callback
-        self.lock = Lock()
+        self.callbackLock = Lock()
 
     ############################################################################
     # Recovers after an overload error
@@ -484,7 +495,7 @@ class DXL:
     # Returns the model code of the actuator
     def ping(self):
         model, self.result, self.error = self.port.ping(self.id)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return model
 
@@ -506,29 +517,28 @@ class DXL:
 
     @property
     def firmwareVersion(self):
-        if self.port.syncReadPush(self, EEPROM_FIRMWARE_VERSION): return None
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_FIRMWARE_VERSION)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def returnDelayTime(self): # In microseconds
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_RETURN_DELAY_TIME)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value << 1
 
     @returnDelayTime.setter
     def returnDelayTime(self, value: int): # In microseconds
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_RETURN_DELAY_TIME, value >> 1)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def cwAngleLimit(self):
         steps, self.result, self.error = self.port.readUInt16(self.id, EEPROM_CW_ANGLE_LIMIT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return self.toDegrees(steps)
 
@@ -536,13 +546,13 @@ class DXL:
     def cwAngleLimit(self, value: int):
         steps = self.fromDegrees(value)
         self.result, self.error = self.port.writeUInt16(self.id, EEPROM_CW_ANGLE_LIMIT, steps)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def ccwAngleLimit(self):
         steps, self.result, self.error = self.port.readUInt16(self.id, EEPROM_CCW_ANGLE_LIMIT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return self.toDegrees(steps)
 
@@ -550,13 +560,13 @@ class DXL:
     def ccwAngleLimit(self, value: int):
         steps = self.fromDegrees(value)
         self.result, self.error = self.port.writeUInt16(self.id, EEPROM_CCW_ANGLE_LIMIT, steps)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def temperatureLimit(self): # In degrees
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_TEMPERATURE_LIMIT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
@@ -566,14 +576,14 @@ class DXL:
     @temperatureLimit.setter
     def temperatureLimit(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_TEMPERATURE_LIMIT, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
     '''
 
     @property
     def minVoltageLimit(self): # In volts
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_MIN_VOLTAGE_LIMIT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return float(value) * 0.1
 
@@ -585,13 +595,13 @@ class DXL:
         elif value > 160:
             value = 160
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_MIN_VOLTAGE_LIMIT, int(value * 10.0))
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def maxVoltageLimit(self): # In volts
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_MAX_VOLTAGE_LIMIT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return float(value) * 0.1
 
@@ -603,20 +613,20 @@ class DXL:
         elif value > 160:
             value = 160
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_MAX_VOLTAGE_LIMIT, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def maxTorque(self):
         value, self.result, self.error = self.port.readUInt16(self.id, EEPROM_MAX_TORQUE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @maxTorque.setter
     def maxTorque(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, EEPROM_MAX_TORQUE, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     # 0 = return status packet for ping instruction only
@@ -625,72 +635,72 @@ class DXL:
     @property
     def statusReturnLevel(self):
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_STATUS_RETURN_LEVEL)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @statusReturnLevel.setter
     def statusReturnLevel(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_STATUS_RETURN_LEVEL, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def shutdown(self):
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_SHUTDOWN)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @shutdown.setter
     def shutdown(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_SHUTDOWN, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def alarmLED(self):
         value, self.result, self.error = self.port.readUInt8(self.id, EEPROM_ALARM_LED)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
         return value
     @alarmLED.setter
     def alarmLED(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, EEPROM_ALARM_LED, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def torqueEnable(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_TORQUE_ENABLE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @torqueEnable.setter
     def torqueEnable(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, RAM_TORQUE_ENABLE, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def led(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_LED)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @led.setter
     def led(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, RAM_LED, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def goalPosition(self):
         steps, self.result, self.error = self.port.readUInt16(self.id, RAM_GOAL_POSITION)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return self.toDegrees(steps)
 
@@ -698,108 +708,108 @@ class DXL:
     def goalPosition(self, value: int):
         steps = self.fromDegrees(value)
         self.result, self.error = self.port.writeUInt16(self.id, RAM_GOAL_POSITION, steps)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def movingSpeed(self):
         value, self.result, self.error = self.port.readUInt16(self.id, RAM_MOVING_SPEED)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @movingSpeed.setter
     def movingSpeed(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, RAM_MOVING_SPEED, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def torqueLimit(self):
         value, self.result, self.error = self.port.readUInt16(self.id, RAM_TORQUE_LIMIT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @torqueLimit.setter
     def torqueLimit(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, RAM_TORQUE_LIMIT, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def presentPosition(self):
         steps, self.result, self.error = self.port.readUInt16(self.id, RAM_PRESENT_POSITION)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
-        return self.toDegrees(self)
+        return self.toDegrees(steps)
 
     @property
     def presentSpeed(self):
         value, self.result, self.error = self.port.readUInt16(self.id, RAM_PRESENT_SPEED)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def presentLoad(self):
         value, self.result, self.error = self.port.readUInt16(self.id, RAM_PRESENT_LOAD)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def presentVoltage(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_PRESENT_VOLTAGE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def presentTemperature(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_PRESENT_TEMPERATURE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def registered(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_REGISTERED)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def moving(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_MOVING)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def lock(self):
         value, self.result, self.error = self.port.readUInt8(self.id, RAM_LOCK)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @lock.setter
     def lock(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, RAM_LOCK, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def punch(self):
         value, self.result, self.error = self.port.readUInt16(self.id, RAM_PUNCH)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @punch.setter
     def punch(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, RAM_PUNCH, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     ############################################################################
@@ -826,10 +836,14 @@ class DXL:
         return value
 
     def fromDegrees(self, degrees: float)->int:
-        return self.centerOffset + (degrees + self.offset) / self.stepResolution
+        return int(self.centerOffset + (degrees + self.offset) / self.stepResolution)
 
     def toDegrees(self, steps: int)->float:
-        return (steps - self.centerOffset) * step.stepResolution - self.offset
+        #print(steps)
+        #print(self.port.modelName(self.model))
+        #print(self.centerOffset)
+        #print(self.stepResolution)
+        return (steps - self.centerOffset) * self.stepResolution - self.offset
 
 ################################################################################
 # Accessors to registers unique to AX, RX and EX models
@@ -845,52 +859,52 @@ class DXL_AX(DXL):
     @property
     def cwComplianceMargin(self):
         value, self.result, self.error = self.port.readUInt8(self.id, AX_RAM_CW_COMPLIANCE_MARGIN)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @cwComplianceMargin.setter
     def cwComplianceMargin(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, AX_RAM_CW_COMPLIANCE_MARGIN, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def ccwComplianceMargin(self):
         value, self.result, self.error = self.port.readUInt8(self.id, AX_RAM_CCW_COMPLIANCE_MARGIN)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @ccwComplianceMargin.setter
     def ccwComplianceMargin(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, AX_RAM_CCW_COMPLIANCE_MARGIN, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def cwComplianceSlope(self):
         value, self.result, self.error = self.port.readUInt8(self.id, AX_RAM_CW_COMPLIANCE_SLOPE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @cwComplianceSlope.setter
     def cwComplianceSlope(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, AX_RAM_CW_COMPLIANCE_MARGIN, SLOPE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def ccwComplianceSlope(self):
         value, self.result, self.error = self.port.readUInt8(self.id, AX_RAM_CCW_COMPLIANCE_SLOPE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @ccwComplianceSlope.setter
     def ccwComplianceSlope(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, AX_RAM_CCW_COMPLIANCE_SLOPE, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
 ################################################################################
@@ -907,7 +921,7 @@ class DXL_EX(DXL_AX):
     @property
     def sensedCurrent(self):
         value, self.result, self.error = self.port.readUInt16(self.id, EX_RAM_SENSED_CURRENT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
@@ -925,86 +939,86 @@ class DXL_MX(DXL):
     @property
     def multiTurnOffset(self):
         value, self.result, self.error = self.port.readUInt16(self.id, MX_EEPROM_MULTI_TURN_OFFSET)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @multiTurnOffset.setter
     def multiTurnOffset(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, MX_EEPROM_MULTI_TURN_OFFSET, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def resolutionDivider(self):
         value, self.result, self.error = self.port.readUInt8(self.id, MX_EEPROM_RESOLUTION_DIVIDER)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @resolutionDivider.setter
     def resolutionDivider(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, MX_EEPROM_RESOLUTION_DIVIDER, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def dGain(self):
         value, self.result, self.error = self.port.readUInt8(self.id, MX_RAM_D_GAIN)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @dGain.setter
     def dGain(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, MX_RAM_D_GAIN, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def iGain(self):
         value, self.result, self.error = self.port.readUInt8(self.id, MX_RAM_I_GAIN)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @iGain.setter
     def iGain(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, MX_RAM_I_GAIN, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def pGain(self):
         value, self.result, self.error = self.port.readUInt8(self.id, MX_RAM_P_GAIN)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @pGain.setter
     def pGain(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, MX_RAM_P_GAIN, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def realtimeTick(self):
         value, self.result, self.error = self.port.readUInt16(self.id, MX_RAM_REALTIME_TICK)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @property
     def goalAcceleration(self):
         value, self.result, self.error = self.port.readUInt8(self.id, MX_RAM_GOAL_ACCELERATION)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @goalAcceleration.setter
     def goalAcceleration(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, MX_RAM_GOAL_ACCELERATION, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
 ################################################################################
@@ -1013,38 +1027,38 @@ class DXL_MX64(DXL_MX):
     @property
     def current(self):
         value, self.result, self.error = self.port.readUInt16(self.id, MX64_RAM_CURRENT)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @current.setter
     def current(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, MX64_RAM_CURRENT, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def torqueCtlModeEnable(self):
         value, self.result, self.error = self.port.readUInt8(self.id, MX64_RAM_TORQUE_CTL_MODE_ENABLE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @torqueCtlModeEnable.setter
     def torqueCtlModeEnable(self, value: int):
         self.result, self.error = self.port.writeUInt8(self.id, MX64_RAM_TORQUE_CTL_MODE_ENABLE, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
 
     @property
     def goalTorque(self):
         value, self.result, self.error = self.port.readUInt16(self.id, MX64_RAM_GOAL_TORQUE)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
         return value
 
     @current.setter
     def goalTorque(self, value: int):
         self.result, self.error = self.port.writeUInt16(self.id, MX64_RAM_GOAL_TORQUE, value)
-        with self.lock:
+        with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
