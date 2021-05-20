@@ -392,6 +392,7 @@ class DXLPort:
     # and 4)
     def syncReadInit(self, register: int, dataLen: int):
         self.syncLock.acquire()
+        self.syncDataLen = dataLen
         self.syncEncoder = sdk.GroupSyncRead(self.port, self.packetHandler, register, dataLen)
         self.syncRegister = register
         self.syncReadDXLs = []
@@ -418,7 +419,7 @@ class DXLPort:
             with self.lock:
                 result = self.syncEncoder.txRxPacket()
             if result == sdk.COMM_SUCCESS:
-                data = { dxl.id: dxl.convert(self.syncRegister, self.syncEncoder.getData(dxl.id, self.syncRegister, 1)) for dxl in self.syncReadDXLs }
+                data = { dxl.id: dxl.convert(self.syncRegister, self.syncEncoder.getData(dxl.id, self.syncRegister, self.syncDataLen)) for dxl in self.syncReadDXLs }
         self.syncEncoder = None
         self.syncReadDXLs = None
         self.syncLock.release()
