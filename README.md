@@ -20,7 +20,7 @@ There are conversions of cryptic codes into human understandable strings.
 
 There's a method to recover from overloads.
 
-Sync reads and writes are easy.
+Sync writes are easy (Sync reads are not supported in Protocol 1.0).
 
 And it's fully documented.
 
@@ -75,13 +75,17 @@ servos = list(range(1,11))
 angles = [-50, -40, -30, -20, -10, 10, 20, 30, 40, 50]
 
 # Enable torque for servos 1 though 10
-result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, zip(servos, [1] * len(servos)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
+# Register value, size in bytes of register (up to 4), dict of { ids: values }
+# refer to Dynamixel e-Manual for register sizes
+result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, dict(zip(servos, [1] * len(servos)))
 
 if result != 0:
   print(f"Comm error on sync write torqueEnable: {controller.resultString(result)}")
 
 # Command servos 1 through 10 to respective goal positions
-result = controller.syncWrite(RAM_GOAL_POSITION, 2, zip(servos, angles)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
+# Register value, size in bytes of register (up to 4), dict of { ids: values }
+# refer to Dynamixel e-Manual for register sizes
+result = controller.syncWrite(RAM_GOAL_POSITION, 2, zip(servos, angles))
 
 if result != 0:
   print(f"Comm error on sync write goalPosition: {controller.resultString(result)}")
@@ -90,26 +94,14 @@ if result != 0:
 timer.sleep(3.0)
 
 # Disable torque for servos 1 through 10
-result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, zip(servos, [0] * len(servos)) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
+# Register value, size in bytes of register (up to 4), dict of { ids: values }
+# refer to Dynamixel e-Manual for register sizes
+result = controller.syncWrite(RAM_TORQUE_ENABLE, 1, zip(servos, [0] * len(servos))
 
 if result != 0:
   print(f"Comm error on sync write torqueEnable: {controller.resultString(result)}")
 ```
-## Example Sync Read
-```Python
-from DXL import *
 
-controller = DXLPort('/dev/ttyUSB0', 1000000)
-
-# Get present position for servos 1 through 10
-result, dictionary = controller.syncRead(RAM_PRESENT_POSITION, 2, list(range(1,11))) # Register value, size in bytes of register (up to 4), refer to Dynamixel e-Manual for register sizes
-
-if result != 0:
-  print(f"Comm error on sync read: {controller.resultString(result)}")
-
-for id in range(1, 11):
-  print(f"Present position of actuator {id}: {dictionary[id]}")
-```
 ## Reference
 
 ### Constants
@@ -331,11 +323,12 @@ gErrorBitDescriptors = ['INSTRUCTION', 'OVERLOAD', 'CHECKSUM', 'RANGE', 'OVERHEA
     def writeUInt16(self, id: int, register: int, value: int)
 
     ############################################################################
+    # Unfortunately, not supported in Protocol 1.0
     # Performs a sync read for the servos specified in the idList
     # If successful, returns COMM_SUCCESS, data
     # If unsuccessful, returns the result code, and an empty dictionary
     # Data is a { servoId: value } dictionary.
-    def syncRead(self, register: int, dataLen: int, idList: List[int])
+    # def syncRead(self, register: int, dataLen: int, idList: List[int])
 
     ############################################################################
     # Performs a sync write for the servo, value pairs specified in the dataDict
