@@ -7,7 +7,15 @@ TEST_DXLPort_writeUInt16 = False
 TEST_DXLPort_syncWrite = False
 TEST_DXL_EEPROM_getters = False
 TEST_DXL_BASE_RAM_getters = False
-TEST_DXL_BASE_RAM_setters = True
+TEST_DXL_BASE_RAM_setters = False
+TEST_DXL_20 = True
+
+import sys
+from select import select
+
+def kbhit():
+    dr, dw, de = select([sys.stdin],[],[],0)
+    return dr != []
 
 import time
 from DXL import *
@@ -158,7 +166,7 @@ if TEST_DXL_BASE_RAM_setters:
         print('---')
         dxl.goalPosition = dxl.presentPosition
         goalPosition = dxl.goalPosition
-        print(f' .goalPosition (original) = {goalPosition}')
+        print(f'.goalPosition (original) = {goalPosition}')
         print(f' setting goalPosition to {goalPosition + 5}')
         dxl.goalPosition = goalPosition + 5
         time.sleep(0.5)
@@ -180,3 +188,37 @@ if TEST_DXL_BASE_RAM_setters:
         '''
         print(f' .movingSpeed = {dxl.movingSpeed}')
         '''
+
+if TEST_DXL_20:
+    dxl20 = dxls[20]
+    presentPosition = dxl20.presentPosition
+    goalPosition = dxl20.goalPosition
+    print('Enable torque on dxl_20')
+    dxl20.enableTorque = 1
+    print(f'dxl_20.presentPosition: {presentPosition}')
+    print(f'dxl_20.goalPosition: {goalPosition}')
+    print(f'dxl_20.offset: {dxl20.offset}')
+    print(f'dxl_20.centerOffset: {dxl20.centerOffset}')
+    print(f'dxl_20.cwAngleLimit: {dxl20.cwAngleLimit}')
+    print(f'dxl_20.ccwAngleLimit: {dxl20.ccwAngleLimit}')
+    print(f'Press return to set dxl_20.goalPosition to {presentPosition}')
+    while(1):
+        if kbhit():
+            ch = sys.stdin.read(1)
+            break
+    print(f'Setting dxl_20.goalPosition to {presentPosition}')
+    dxl20.goalPosition = presentPosition
+    print('Waiting 1 second')
+    time.sleep(1.0)
+    presentPosition = dxl20.presentPosition
+    goalPosition = dxl20.goalPosition
+    print(f'dxl_20.presentPosition: {presentPosition}')
+    print(f'dxl_20.goalPosition: {goalPosition}')
+    print('Press return to disable torque on dxl_20')
+    while(1):
+        if kbhit():
+            ch = sys.stdin.read(1)
+            break
+    dxl20.torqueEnable = 0
+
+

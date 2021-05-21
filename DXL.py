@@ -1062,3 +1062,4 @@ class DXL_MX64(DXL_MX):
         self.result, self.error = self.port.writeUInt16(self.id, MX64_RAM_GOAL_TORQUE, value)
         with self.callbackLock:
             if self.callback != None: self.callback(self, self.result, self.error)
+-60.104
