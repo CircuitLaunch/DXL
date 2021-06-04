@@ -6,9 +6,9 @@ TEST_DXLPort_writeUInt8 = False
 TEST_DXLPort_writeUInt16 = False
 TEST_DXLPort_syncWrite = False
 TEST_DXL_EEPROM_getters = False
-TEST_DXL_BASE_RAM_getters = False
+TEST_DXL_BASE_RAM_getters = True
 TEST_DXL_BASE_RAM_setters = False
-TEST_DXL_20 = True
+TEST_DXL_20 = False
 
 import sys
 from select import select
@@ -20,7 +20,7 @@ def kbhit():
 import time
 from DXL import *
 
-port = DXLPort("/dev/ttyUSB2", 1000000)
+port = DXLPort("/dev/serial/by-id/usb-Xevelabs_USB2AX_74031303437351011190-if00", 1000000)
 
 def callback(dxl, result, error):
     if result != 0 or error != 0:
@@ -64,7 +64,7 @@ if TEST_DXLPort_writeUInt8:
         print(f'Right arm writing 0 to dxl_{id}.portEnable')
         port.writeUInt8(id, RAM_TORQUE_ENABLE, 0)
         print(f'Right arm: dxl_{id}.torqueEnable: {port.readUInt8(id, RAM_TORQUE_ENABLE)[0]}')
- 
+
     for id in leftArmIds:
         print(f'Left arm writing 1 to dxl_{id}.portEnable')
         port.writeUInt8(id, RAM_TORQUE_ENABLE, 1)
@@ -80,7 +80,7 @@ if TEST_DXLPort_writeUInt16:
         port.writeUInt16(id, RAM_GOAL_POSITION, presentPosition)
         print(f'Right arm: dxl_{id}.goalPosition: {port.readUInt16(id, RAM_GOAL_POSITION)[0]}')
         port.writeUInt8(id, RAM_TORQUE_ENABLE, 0)
- 
+
     for id in leftArmIds:
         presentPosition, _, _ = port.readUInt16(id, RAM_PRESENT_POSITION)
         print(f'Left arm writing {presentPosition} to dxl_{id}.goalPosition')
@@ -220,5 +220,3 @@ if TEST_DXL_20:
             ch = sys.stdin.read(1)
             break
     dxl20.torqueEnable = 0
-
-

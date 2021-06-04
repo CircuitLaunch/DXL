@@ -1,7 +1,7 @@
 import time
 from DXL import *
 
-port = DXLPort("/dev/ttyUSB2", 1000000)
+port = DXLPort("/dev/serial/by-id/usb-Xevelabs_USB2AX_74031303437351011190-if00", 1000000)
 
 def callback(dxl, result, error):
     if result != 0 or error != 0:
